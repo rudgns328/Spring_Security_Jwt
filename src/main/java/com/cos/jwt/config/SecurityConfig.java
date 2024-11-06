@@ -1,7 +1,8 @@
 package com.cos.jwt.config;
 
 import com.cos.jwt.config.jwt.JwtAuthenticationFilter;
-import com.cos.jwt.filter.MyFilter3;
+import com.cos.jwt.config.jwt.JwtAuthorizationFilter;
+import com.cos.jwt.repository.UserRepository;
 import lombok.RequiredArgsConstructor;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
@@ -12,7 +13,6 @@ import org.springframework.security.config.annotation.web.configuration.EnableWe
 import org.springframework.security.config.annotation.web.configurers.AbstractHttpConfigurer;
 import org.springframework.security.config.http.SessionCreationPolicy;
 import org.springframework.security.web.SecurityFilterChain;
-import org.springframework.security.web.context.SecurityContextPersistenceFilter;
 import org.springframework.web.filter.CorsFilter;
 
 @Configuration
@@ -21,6 +21,8 @@ import org.springframework.web.filter.CorsFilter;
 public class SecurityConfig {
 
     private final CorsFilter corsFilter;
+    private final UserRepository userRepository;
+
     @Bean
     public AuthenticationManager authenticationManager(AuthenticationConfiguration authenticationConfiguration) throws Exception {
         return authenticationConfiguration.getAuthenticationManager();
@@ -30,7 +32,7 @@ public class SecurityConfig {
     public SecurityFilterChain filterChain(HttpSecurity http, AuthenticationManager authenticationManager) throws Exception {
 
         http
-                .addFilterBefore(new MyFilter3(), SecurityContextPersistenceFilter.class)
+//                .addFilterBefore(new MyFilter3(), SecurityContextPersistenceFilter.class)  // -> 22, 23강 테스트용
                 .csrf(AbstractHttpConfigurer::disable)
                 .sessionManagement(sessionManagement ->
                                 sessionManagement.sessionCreationPolicy(SessionCreationPolicy.STATELESS))
@@ -38,6 +40,7 @@ public class SecurityConfig {
                 .formLogin(AbstractHttpConfigurer::disable)
                 .httpBasic(AbstractHttpConfigurer::disable)
                 .addFilter(new JwtAuthenticationFilter(authenticationManager)) // AuthenticationManager
+                .addFilter(new JwtAuthorizationFilter(authenticationManager, userRepository))
                 .authorizeHttpRequests(authorize ->
                         authorize
                                 .requestMatchers("/api/v1/user/**").hasAnyRole("USER", "MANAGER", "ADMIN")

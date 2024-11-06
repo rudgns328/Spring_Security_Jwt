@@ -3,7 +3,7 @@ package com.cos.jwt.config.jwt;
 import com.auth0.jwt.JWT;
 import com.auth0.jwt.algorithms.Algorithm;
 import com.cos.jwt.config.auth.PrincipalDetails;
-import com.cos.jwt.model.User;
+import com.cos.jwt.dto.LoginRequestDto;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import jakarta.servlet.FilterChain;
 import jakarta.servlet.ServletException;
@@ -30,8 +30,11 @@ public class JwtAuthenticationFilter extends UsernamePasswordAuthenticationFilte
     // /login 요청을 하면 로그인 시도를 위해서 실행되는 함수
     @Override
     public Authentication attemptAuthentication(HttpServletRequest request, HttpServletResponse response) throws AuthenticationException {
+
         System.out.println("JwtAuthenticationFilter : 로그인 시도중");
 
+        ObjectMapper om = new ObjectMapper();
+        LoginRequestDto loginRequestDto = null;
         // 1. username, password 받아서
         try {
 //            BufferedReader br = request.getReader();
@@ -40,24 +43,28 @@ public class JwtAuthenticationFilter extends UsernamePasswordAuthenticationFilte
 //            while((input = br.readLine()) != null){
 //                System.out.println(input);
 //            }
-            ObjectMapper om = new ObjectMapper();
-            User user = om.readValue(request.getInputStream(), User.class);
-            System.out.println(user);
+
+            // request 에 있는 username 과 password 를 파싱해서 자바 Object 로 받기
+            loginRequestDto = om.readValue(request.getInputStream(), LoginRequestDto.class);
+            System.out.println(loginRequestDto);
 
             UsernamePasswordAuthenticationToken authenticationToken =
-                    new UsernamePasswordAuthenticationToken(user.getUsername(), user.getPassword());
+                    new UsernamePasswordAuthenticationToken(loginRequestDto.getUsername(), loginRequestDto.getPassword()); // 토큰 생성
 
+            // 2. 정상인지 로그인 시도 해보기. authenticationManager로 로그인 시도!!
             // PrincipalDetailsService 의 loadUserByUsername() 함수가 실행된 후 정상이면 authentication 이 리턴됨
             // DB에 있는 username 과 password 가 일치한다
-            Authentication authentication = authenticationManager.authenticate(authenticationToken);
+            Authentication authentication = authenticationManager.authenticate(authenticationToken); // 토큰 넣어서 던짐, Authentication 에 로그인한 정보 담김.
 
-            // -> 로그인이 되었다는 뜻
+            // -> 로그인이 되었다는 뜻 // 3. PrincipalDetails를 세션에 담고(권한 관리를 위해서)
             PrincipalDetails principalDetails = (PrincipalDetails) authentication.getPrincipal();
             System.out.println("로그인 완료됨 : " + principalDetails.getUser().getUsername()); // 로그인 정상적으로 되었다는 뜻
 
             // authentication 객체가 session 영역에 저장을 해야 하고 그 방법이 return 해주는 것
             // return 의 이유는 권한 관리를 security 가 대신 해주기 때문에 편하려고 하는거임
             // 굳이 JWT 토큰을 사용하면서 세션을 만들 이유가 없음. 근데 단지 권한 처리때문에 session 넣어 주는 것
+
+            // 4. JWT 토큰을 만들어서 응답해주면 됨
             return authentication;
         } catch (IOException e) {
             throw new RuntimeException(e);
@@ -74,12 +81,12 @@ public class JwtAuthenticationFilter extends UsernamePasswordAuthenticationFilte
 
         // RSA 방식은 아니고 Hash 암호방식
         String jwtToken = JWT.create() // pom.xml
-                .withSubject("cos토큰")
-                .withExpiresAt(new Date(System.currentTimeMillis()+(60000*10))) //1분 * 10 = 10분
+                .withSubject(principalDetails.getUsername())
+                .withExpiresAt(new Date(System.currentTimeMillis() + JwtProperties.EXPIRATION_TIME)) //1분 * 10 = 10분
                 .withClaim("id", principalDetails.getUser().getId())
                 .withClaim("username", principalDetails.getUser().getUsername())
-                .sign(Algorithm.HMAC512("cos")); // HMAC512는 시크릿 키가 있어야 함.
+                .sign(Algorithm.HMAC512(JwtProperties.SECRET)); // HMAC512는 시크릿 키가 있어야 함.
 
-        response.addHeader("Authorization", "Bearer " + jwtToken);
+        response.addHeader(JwtProperties.HEADER_STRING, JwtProperties.TOKEN_PREFIX + jwtToken);
     }
 }
